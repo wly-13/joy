@@ -1248,17 +1248,17 @@ void* process_packet (unsigned char *ctx_ptr,
                     record->ip_type = ctx->curr_pkt_type;
                     if (record->is_tcp_retrans == 1) {
                         /* same packet retransmitted, just stop processing */
-	                if (allocated_packet_header) {
-		            free(dyn_header);
-	                }
+	                    if (allocated_packet_header) {
+		                    free(dyn_header);
+	                    }
                         /* return the existing flow record */
                         return record;
                     } else if (record->is_tcp_retrans == 2) {
                         /* same packet retransmitted but with additional data */
                         /* TODO: process the additional data */
-	                if (allocated_packet_header) {
-		            free(dyn_header);
-	                }
+	                    if (allocated_packet_header) {
+		                    free(dyn_header);
+	                    }
                         /* return the existing flow record with the new data */
                         return record;
                     } else {
@@ -1296,9 +1296,9 @@ void* process_packet (unsigned char *ctx_ptr,
         record = process_ip(ctx, header, transport_start, transport_len, &key);
         if (record == NULL) {
             joy_log_err("Unable to process ip packet (improper length or otherwise malformed)");
-	    if (allocated_packet_header) {
-		free(dyn_header);
-	    }
+	        if (allocated_packet_header) {
+		        free(dyn_header);
+	        }
             return NULL;
         }
         record->invalid = 1;

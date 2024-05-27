@@ -66,6 +66,13 @@ typedef enum {
 extern float parameters_bd[NUM_PARAMETERS_BD_LOGREG];
 extern float parameters_splt[NUM_PARAMETERS_SPLT_LOGREG];
 
+/* Feature extraction functions */
+void get_feature(const unsigned short *pkt_len, const struct timeval *pkt_time,
+	       const unsigned short *pkt_len_twin, const struct timeval *pkt_time_twin,
+  	       struct timeval start_time, struct timeval start_time_twin, uint32_t max_num_pkt_len,
+	       uint16_t sp, uint16_t dp, uint32_t op, uint32_t ip, uint32_t np_o, uint32_t np_i,
+	       uint32_t ob, uint32_t ib, uint16_t use_bd, const uint32_t *bd, const uint32_t *bd_t, float *features);
+
 /* Classifier functions */
 float classify(const unsigned short *pkt_len, const struct timeval *pkt_time,
        const unsigned short *pkt_len_twin, const struct timeval *pkt_time_twin,

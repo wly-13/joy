@@ -72,6 +72,8 @@
 #include "utils.h"
 #include "config.h"
 #include "joy_api_private.h"
+#include "timer.h"
+
 
 /*
  * The VERSION variable should be set by a compiler directive, based
@@ -101,6 +103,8 @@ static const int include_os = 1;
 #define expiration_type_reserved 'z'
 #define expiration_type_active  'a'
 #define expiration_type_inactive 'i'
+
+extern joy_benchmark_t joy_benchmark;
 
 /*
  * Local prototypes
@@ -551,6 +555,8 @@ static void flow_record_chrono_list_append (joy_ctx_data *ctx, flow_record_t *re
  */
 static void flow_record_chrono_list_remove (joy_ctx_data *ctx, flow_record_t *record) {
 
+    TIME_START(list_delete);
+
     if (record == ctx->flow_record_chrono_first) {
         ctx->flow_record_chrono_first = record->time_next;
     }
@@ -564,6 +570,8 @@ static void flow_record_chrono_list_remove (joy_ctx_data *ctx, flow_record_t *re
     if (record->time_next != NULL) {
         record->time_next->time_prev = record->time_prev;
     }
+
+    TIME_END(list_delete, joy_benchmark.add_del_tsc)
 }
 
 /**
@@ -694,9 +702,8 @@ flow_record_t *flow_key_get_record (joy_ctx_data *ctx,
     }
 
     /* if we get here, then record == NULL  */
-
     if (create_new_records) {
-
+        TIME_START(create);
         /* allocate and initialize a new flow record */
         record = calloc(1, sizeof(flow_record_t));
         joy_log_debug("LIST record %p allocated\n", record);
@@ -738,6 +745,7 @@ flow_record_t *flow_key_get_record (joy_ctx_data *ctx,
             /* this flow has no twin, so add it to chronological list */
             flow_record_chrono_list_append(ctx, record);
         }
+        TIME_END(create, joy_benchmark.add_del_tsc);
     }
     return record;
 }
@@ -748,6 +756,14 @@ flow_record_t *flow_key_get_record (joy_ctx_data *ctx,
  * \return none
  */
 static void flow_record_delete (joy_ctx_data *ctx, flow_record_t *r) {
+
+    flow_info_t ff;
+    update_flow_info(r, &ff);
+    if (r->dir == 0) {
+        update_statistics(&joy_benchmark, &ff);
+    }
+
+    TIME_START(array_delete);
 
     if (flow_record_list_remove(&ctx->flow_record_list_array[r->key_hash], r) != 0) {
         joy_log_err("problem removing flow record %p from list", r);
@@ -800,6 +816,7 @@ static void flow_record_delete (joy_ctx_data *ctx, flow_record_t *r) {
     memset_s(r, sizeof(flow_record_t), 0, sizeof(flow_record_t));
     free(r);
     r = NULL;
+    TIME_END(array_delete, joy_benchmark.add_del_tsc);
 }
 
 /**
@@ -1586,8 +1603,8 @@ static void flow_record_print_json
      * Inline classification of flows
      */
     if (glb_config->include_classifier) {
+        TIME_START(predict);
         float score = 0.0;
-
         if (rec->twin) {
             score = classify(rec->pkt_len, rec->pkt_time, rec->twin->pkt_len, rec->twin->pkt_time,
                                      rec->start, rec->twin->start,
@@ -1595,15 +1612,51 @@ static void flow_record_print_json
                                      rec->ob, rec->twin->ob, glb_config->byte_distribution,
                                      rec->byte_count, rec->twin->byte_count);
             ((flow_record_t*)rec)->twin->classify_value = score;
+            TIME_END(predict, joy_benchmark.prediction_tsc);
         } else {
             score = classify(rec->pkt_len, rec->pkt_time, NULL, NULL,   rec->start, rec->start,
                                      glb_config->num_pkts, rec->key.sp, rec->key.dp, rec->np, 0, rec->op, 0,
                                      rec->ob, 0, glb_config->byte_distribution,
                                      rec->byte_count, NULL);
             ((flow_record_t*)rec)->classify_value = score;
+            TIME_END(predict, joy_benchmark.prediction_tsc);
         }
-
         zprintf(ctx->output, ",\"p_malware\":%f", score);
+    }
+
+    if(glb_config->ml_feature_o) {
+        float ml_feature[NUM_PARAMETERS_BD_LOGREG] = {1.0};
+
+        if (rec->twin) {
+            get_feature(rec->pkt_len, rec->pkt_time, rec->twin->pkt_len, rec->twin->pkt_time,
+                                 rec->start, rec->twin->start,
+                                 glb_config->num_pkts, rec->key.sp, rec->key.dp, rec->np, rec->twin->np, rec->op, rec->twin->op,
+                                 rec->ob, rec->twin->ob, glb_config->byte_distribution,
+                                 rec->byte_count, rec->twin->byte_count, ml_feature);
+            /* save to file */
+            for (int i = 0; i < NUM_PARAMETERS_BD_LOGREG; ++i) {
+                if (i < NUM_PARAMETERS_BD_LOGREG - 1) {
+                    fprintf(glb_config->ml_feature_o, "%f,", ml_feature[i]);
+                } else {
+                    // add one number to end of line, make up for 465 features
+                    fprintf(glb_config->ml_feature_o, "%f,1.000000\n", ml_feature[i]);
+                }
+            }
+        } else {
+            get_feature(rec->pkt_len, rec->pkt_time, NULL, NULL,   rec->start, rec->start,
+                                     glb_config->num_pkts, rec->key.sp, rec->key.dp, rec->np, 0, rec->op, 0,
+                                     rec->ob, 0, glb_config->byte_distribution,
+                                     rec->byte_count, NULL, ml_feature);
+            /* save to file */
+            for (int i = 0; i < NUM_PARAMETERS_BD_LOGREG; ++i) {
+                if (i < NUM_PARAMETERS_BD_LOGREG - 1) {
+                    fprintf(glb_config->ml_feature_o, "%f,", ml_feature[i]);
+                } else {
+                    // add one number to end of line, make up for 465 features
+                    fprintf(glb_config->ml_feature_o, "%f,1.000000\n", ml_feature[i]);
+                }
+            }
+        }
     }
 
     /* IP object */

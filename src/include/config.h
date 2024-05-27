@@ -102,6 +102,8 @@ typedef struct configuration {
 
     declare_all_features_config_uint(feature_list) 
   
+    char *feature_file;     /*!< feature output file, if not NULL */
+    FILE *ml_feature_o;     /*!< handler to output flow feature*/
     char *compact_byte_distribution;
     char *intface;
     char *filename;              /*!< output file, if not NULL */

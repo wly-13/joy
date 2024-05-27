@@ -4,6 +4,7 @@ lib_LTLIBRARIES = libjoy.la
 
 if BUILD_WITH_SAFEC
 libjoy_la_SOURCES = \
+    ../src/timer.c \
 	../src/joy_api.c \
 	../src/p2f.c \
 	../src/osdetect.c \
@@ -75,6 +76,7 @@ libjoy_la_SOURCES = \
 		../src/include/salt.h \
 		../src/include/ssh.h \
 		../src/include/str_match.h \
+		../src/include/timer.h \
 		../src/include/tls.h \
 		../src/include/updater.h \
 		../src/include/utils.h \
@@ -84,6 +86,7 @@ libjoy_la_SOURCES = \
 
 else
 libjoy_la_SOURCES = \
+    ../src/timer.c \
 	../src/joy_api.c \
 	../src/p2f.c \
 	../src/osdetect.c \
@@ -157,6 +160,7 @@ libjoy_la_SOURCES = \
 		../src/include/salt.h \
 		../src/include/ssh.h \
 		../src/include/str_match.h \
+		../src/include/timer.h \
 		../src/include/tls.h \
 		../src/include/updater.h \
 		../src/include/utils.h \
@@ -209,6 +213,7 @@ library_include_HEADERS= \
 		../src/include/salt.h \
 		../src/include/ssh.h \
 		../src/include/str_match.h \
+		../src/include/timer.h \
 		../src/include/tls.h \
 		../src/include/updater.h \
 		../src/include/utils.h \

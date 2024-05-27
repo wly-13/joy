@@ -92,6 +92,7 @@
 #include "proto_identify.h"
 #include "pcap.h"
 #include "joy_api_private.h"
+#include "timer.h"
 
 #ifdef USE_AF_PACKET
 #include "af_packet_v3.h"
@@ -129,6 +130,7 @@ typedef enum joy_operating_mode_ {
 #define PCAP_SNAPLEN_SIZE 16384
 #define PCAP_TIMEOUT_VAL 10000
 
+
 /*
  * Local globals
  */
@@ -150,6 +152,9 @@ static pthread_mutex_t thrd_lock[MAX_JOY_THREADS] =
 /* config is the global configuration */
 extern configuration_t active_config;
 extern configuration_t *glb_config;
+
+/* global veriable*/
+joy_benchmark_t joy_benchmark;
 
 /* logfile definitions */
 extern FILE *info;
@@ -1053,7 +1058,7 @@ static int process_directory_of_files(joy_ctx_data *ctx, char *input_directory) 
 
                 tmp_ret = process_pcap_file(ctx->ctx_id, pcap_filename, filter_exp, &net, &fp);
                 if (tmp_ret < 0) {
-		    closedir(dir);
+		            closedir(dir);
                     return tmp_ret;
                 }
 
@@ -1313,6 +1318,7 @@ static void joy_get_packets(unsigned char *num_contexts,
 }
 #endif
 
+
 /**
  \fn int main (int argc, char **argv)
  \brief main entry point for joy
@@ -1350,6 +1356,13 @@ int main (int argc, char **argv) {
     struct passwd *pw = NULL;
     const char *user = NULL;
 #endif
+    
+    TIME_ALIGN;
+    memset(&joy_benchmark, 0x00, sizeof(joy_benchmark_t));
+    int ii = 0;
+    for (ii = 0; ii < MAX_PROTO_TYPE; ii++) {
+        joy_benchmark.proto_info[ii].type = ii;
+    }
 
     /*
      * set "info" to stderr; this output stream is used for
@@ -1503,8 +1516,9 @@ int main (int argc, char **argv) {
        glb_config->num_threads = 1;
        init_data.contexts = 1;
     }
-    init_data.inact_timeout = 10;
-    init_data.act_timeout = 20;
+    //default is 10,20
+    init_data.inact_timeout = 150;
+    init_data.act_timeout = 150;
 
     /* config was already setup, use API with pre-set configuration */
     joy_initialize_no_config(glb_config, info, &init_data);
@@ -1547,7 +1561,8 @@ int main (int argc, char **argv) {
     if (glb_config->ipfix_export_port) {
         ipfix_exporter_init(glb_config->ipfix_export_remote_host);
     }
-
+    TIME_START(total);
+    /* Start online mode code */
     if (joy_mode == MODE_ONLINE) {   /* live capture */
 
         /*
@@ -1686,7 +1701,8 @@ int main (int argc, char **argv) {
         }
 
         pcap_close(handle);
-
+    /* End online mode code */
+    /* Start ipfix collector online mode code */
     } else if (joy_mode == MODE_IPFIX_COLLECT_ONLINE) {
         joy_ctx_data *ctx = NULL;
 
@@ -1721,7 +1737,8 @@ int main (int argc, char **argv) {
 
         joy_print_flow_data(ctx->ctx_id, JOY_ALL_FLOWS);
         fflush(info);
-
+    /* End ipfix collector online mode code */
+    /* Start offline mode code */
     } else { /* mode = mode_offline */
         int multi_file_input = 0;
         joy_ctx_data *ctx = NULL;
@@ -1768,11 +1785,11 @@ int main (int argc, char **argv) {
         for (i=1+opt_count; i<argc; i++) {
             if (stat(argv[i], &sb) == 0 && S_ISDIR(sb.st_mode)) {
                 /* processing an input directory */
-		tmp_ret = strnlen_s(argv[i], (MAX_FILENAME_LEN*2));
-		if (tmp_ret == 0 || tmp_ret >= (MAX_FILENAME_LEN*2)) {
-		    fprintf(stderr, "error:failed filename too long %s\n", argv[i]);
-		    return -1;
-		}
+		        tmp_ret = strnlen_s(argv[i], (MAX_FILENAME_LEN*2));
+		        if (tmp_ret == 0 || tmp_ret >= (MAX_FILENAME_LEN*2)) {
+		            fprintf(stderr, "error:failed filename too long %s\n", argv[i]);
+		            return -1;
+		        }
                 tmp_ret = process_directory_of_files(ctx, argv[i]);
                 if (tmp_ret < 0) {
                     return tmp_ret;
@@ -1793,6 +1810,8 @@ int main (int argc, char **argv) {
             }
         }
     }
+    /* End offline mode code */
+    TIME_END(total,joy_benchmark.total_process_tsc);
 
     if (joy_mode != MODE_OFFLINE) {
         for (ctx_counter=0; ctx_counter < init_data.contexts; ++ctx_counter) {
@@ -1804,10 +1823,72 @@ int main (int argc, char **argv) {
     for (ctx_counter=0; ctx_counter < init_data.contexts; ++ctx_counter) {
         joy_context_cleanup(ctx_counter);
     }
+    
+    /* print benchmark data */
+    double flow_cnt_per_second = (double)joy_benchmark.total_flow_count /
+        joy_benchmark.total_process_tsc * SIXTH_POWER;
+    double packet_cnt_per_second = (double)joy_benchmark.total_packet_count /
+        joy_benchmark.total_process_tsc * SIXTH_POWER;
+    double byte_cnt_per_second = (double)joy_benchmark.total_byte_count /
+        joy_benchmark.total_process_tsc * SIXTH_POWER;
+
+    joy_log_err("\nTraffic statistics:\n");
+    joy_log_err("\t\tTotal flows: %lu\tTotal packets: %lu\tTotal bytes: %lu\n",
+            joy_benchmark.total_flow_count,
+            joy_benchmark.total_packet_count,
+            joy_benchmark.total_byte_count);
+
+    proto_info_t proto_info_sorted[MAX_PROTO_TYPE];
+    const char *proto_name = NULL;
+    uint32_t flows = 0;
+    uint64_t packets = 0;
+    uint64_t bytes = 0;
+
+    memcpy(proto_info_sorted, joy_benchmark.proto_info,
+            sizeof(proto_info_t) * MAX_PROTO_TYPE);
+    /* sort protocol information by flow count */
+    qsort(proto_info_sorted, MAX_PROTO_TYPE,
+            sizeof(proto_info_t), proto_compare);
+    /* protocol information output */
+    joy_log_err("\nTop protocol:\n");
+    for (i = 0; i < MAX_PROTO_TYPE; i++) {
+        flows = proto_info_sorted[i].flows;
+        packets = proto_info_sorted[i].packets;
+        bytes = proto_info_sorted[i].bytes;
+        if (flows > 0) {
+            if ((proto_name = proto2str(proto_info_sorted[i].type))) {
+                joy_log_err("\t\t%s\tflows: %-8d\tpackets: %-8lu\tbytes: %-16lu\t[ %5.02f %% ]\n",
+                        proto_name, flows, packets, bytes,
+                        100 * (double)flows / (double)joy_benchmark.total_flow_count);
+            }
+        }
+    }
+
+    joy_log_err("\nProcess tsc (μs):\n");
+    joy_log_err("\t\t%s:\t\t\t %-16lu\t\n", "Total",
+            joy_benchmark.total_process_tsc);
+    joy_log_err("\t\t%s:\t\t %-16lu\t\n", "Fetch PCAP",
+            joy_benchmark.fetch_pcap_tsc);
+    joy_log_err("\t\t%s:\t\t %-16lu\t\n", "Create&Delete",
+            joy_benchmark.add_del_tsc);
+    joy_log_err("\t\t%s:\t\t %-16lu\t\n", "Flow Table + Feature Extraction",
+            joy_benchmark.feature_extraction_tsc);
+    joy_log_err("\t\t%s:\t %-16lu\t\n", "JSON String Building",
+            joy_benchmark.json_string_output_tsc);
+    joy_log_err("\t\t%s:\t\t %-16lu\t\n", "Prediction",
+            joy_benchmark.prediction_tsc);
+
     joy_shutdown();
     return 0;
 }
 
+static
+const unsigned char *fetch_packet(struct pcap_pkthdr *hdr) {
+    TIME_START(fetch);
+    const u_char* pcap = pcap_next(handle, hdr);
+    TIME_END(fetch, joy_benchmark.fetch_pcap_tsc);
+    return pcap;
+}
 
 /**
  * \fn int process_pcap_file (int index, char *file_name, char *filter_exp, bpf_u_int32 *net, struct bpf_program *fp)
@@ -1826,6 +1907,9 @@ int process_pcap_file (int index, char *file_name, const char *filtr_exp, bpf_u_
     char errbuf[PCAP_ERRBUF_SIZE];
     int more = 1;
     uint64_t idx = index;
+    struct pcap_pkthdr hdr;
+    const unsigned char *packet = NULL;
+    flow_record_t *record;
 
     joy_log_info("reading pcap file %s", file_name);
 
@@ -1851,13 +1935,23 @@ int process_pcap_file (int index, char *file_name, const char *filtr_exp, bpf_u_
             return -3;
         }
     }
-
-    while (more) {
+    int pcount=0;
+    while (packet = fetch_packet(&hdr)) {
         /* Loop over all packets in capture file */
-        more = pcap_dispatch(handle, NUM_PACKETS_IN_LOOP, joy_libpcap_process_packet, (unsigned char *)idx);
+        if (!packet) {
+            continue;
+        }
+        pcount++;
+        TIME_START(flow_table);
+        record = joy_process_packet((unsigned char *)idx, &hdr,packet,0,NULL);
+        //more = pcap_dispatch(handle, NUM_PACKETS_IN_LOOP, joy_libpcap_process_packet, (unsigned char *)idx);
+        TIME_END(flow_table,joy_benchmark.feature_extraction_tsc)
         /* Print out expired flows */
+        TIME_START(json_string_extraction)
         joy_print_flow_data(index, JOY_EXPIRED_FLOWS);
+        TIME_END(json_string_extraction, joy_benchmark.json_string_output_tsc)
     }
+    joy_log_err("pcount: %d",pcount)
 
     joy_log_info("all flows processed");
 
@@ -1867,6 +1961,8 @@ int process_pcap_file (int index, char *file_name, const char *filtr_exp, bpf_u_
     }
 
     pcap_close(handle);
+    TIME_START(feature_extraction_a)
     joy_print_flow_data(index, JOY_ALL_FLOWS);
+    TIME_END(feature_extraction_a, joy_benchmark.feature_extraction_tsc)
     return 0;
 }

@@ -405,6 +405,109 @@ void get_mc_rep_times (uint16_t *times, float *time_mc, uint16_t num_packets) {
 }
 
 /**
+ * \fn float* get_feature (const unsigned short *pkt_len, const struct timeval *pkt_time,
+        const unsigned short *pkt_len_twin, const struct timeval *pkt_time_twin,
+          struct timeval start_time, struct timeval start_time_twin, uint32_t max_num_pkt_len,
+        uint16_t sp, uint16_t dp, uint32_t op, uint32_t ip, uint32_t np_o, uint32_t np_i,
+        uint32_t ob, uint32_t ib, uint16_t use_bd, const uint32_t *bd, const uint32_t *bd_t)
+ * \param pkt_len length of the packet
+ * \param pkt_time time of the packet
+ * \param pkt_len_twin length of the packet twin
+ * \param pkt_time_twin time of the packet twin
+ * \param start_time start time
+ * \param start_time_twin start time of the twin
+ * \param max_num_pkt_len maximum len of number of packets
+ * \param sp
+ * \param dp
+ * \param op
+ * \param ip
+ * \param np_o
+ * \param np_i
+ * \param ob
+ * \param ib
+ * \param use_bd
+ * \param *bd pointer to bd
+ * \param *bd_t pointer to bd type
+ * \return float score
+ */
+void get_feature(const unsigned short *pkt_len, const struct timeval *pkt_time,
+	       const unsigned short *pkt_len_twin, const struct timeval *pkt_time_twin,
+  	       struct timeval start_time, struct timeval start_time_twin, uint32_t max_num_pkt_len,
+	       uint16_t sp, uint16_t dp, uint32_t op, uint32_t ip, uint32_t np_o, uint32_t np_i,
+	       uint32_t ob, uint32_t ib, uint16_t use_bd, const uint32_t *bd, const uint32_t *bd_t, float *features) {
+
+    // float features[NUM_PARAMETERS_BD_LOGREG] = {1.0};
+    float mc_lens[MC_BINS_LEN*MC_BINS_LEN];
+    float mc_times[MC_BINS_TIME*MC_BINS_TIME];
+    uint32_t i;
+
+    uint32_t op_n = min(np_o, max_num_pkt_len);
+    uint32_t ip_n = min(np_i, max_num_pkt_len);
+    uint16_t *merged_lens = NULL;
+    uint16_t *merged_times = NULL;
+
+    for (i = 1; i < NUM_PARAMETERS_BD_LOGREG; i++) {
+        features[i] = 0.0;
+    }
+
+    merged_lens = calloc(1, sizeof(uint16_t)*(op_n + ip_n));
+    merged_times = calloc(1, sizeof(uint16_t)*(op_n + ip_n));
+    if (!merged_lens || !merged_times) {
+	    free(merged_lens);
+	    free(merged_times);
+	    return(NULL);
+    }
+
+    // fill out meta data
+    features[1] = (float)dp; // destination port
+    features[2] = (float)sp; // source port
+    features[3] = (float)ip; // inbound packets
+    features[4] = (float)op; // outbound packets
+    features[5] = (float)ib; // inbound bytes
+    features[6] = (float)ob; // outbound bytes
+    features[7] = 0.0;// skipping 7 until we process the pkt_time arrays
+
+    // find the raw features
+    merge_splt_arrays(pkt_len, pkt_time, pkt_len_twin, pkt_time_twin, start_time, start_time_twin, op_n, ip_n,
+		                    merged_lens, merged_times);
+
+    // find new duration
+    for (i = 0; i < op_n+ip_n; i++) {
+        features[7] += (float)merged_times[i];
+    }
+
+    // get the Markov chain representation for the lengths
+    get_mc_rep_lens(merged_lens, mc_lens, op_n+ip_n);
+
+    // get the Markov chain representation for the times
+    get_mc_rep_times(merged_times, mc_times, op_n+ip_n);
+
+    // fill out lens/times in feature vector
+    for (i = 0; i < MC_BINS_LEN*MC_BINS_LEN; i++) {
+        features[i+8] = mc_lens[i]; // lengths
+    }
+    for (i = 0; i < MC_BINS_TIME*MC_BINS_TIME; i++) {
+        features[i+8+MC_BINS_LEN*MC_BINS_LEN] = mc_times[i]; // times
+    }
+
+    // fill out byte distribution features
+    if (ob+ib > 100 && use_bd) {
+        for (i = 0; i < NUM_BD_VALUES; i++) {
+            if (pkt_len_twin != NULL) {
+                features[i+8+MC_BINS_LEN*MC_BINS_LEN+MC_BINS_TIME*MC_BINS_TIME] = (bd[i]+bd_t[i])/((float)(ob+ib));
+            } else {
+                features[i+8+MC_BINS_LEN*MC_BINS_LEN+MC_BINS_TIME*MC_BINS_TIME] = bd[i]/((float)(ob));
+            }
+        }
+    }
+  
+    free(merged_lens);
+    free(merged_times);
+
+    return;
+}
+
+/**
  * \fn float classify (const unsigned short *pkt_len, const struct timeval *pkt_time,
         const unsigned short *pkt_len_twin, const struct timeval *pkt_time_twin,
           struct timeval start_time, struct timeval start_time_twin, uint32_t max_num_pkt_len,

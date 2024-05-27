@@ -625,7 +625,7 @@ int joy_initialize_no_config(void *config, FILE *err_info, joy_init_t *data)
         joy_log_err("could not initialize the protocol identification dictionary");
         return failure;
     }
-
+    
     /* make sure logfile/stderr is setup */
     glb_config = (configuration_t*)config;
     if (err_info == NULL) {
@@ -642,6 +642,16 @@ int joy_initialize_no_config(void *config, FILE *err_info, joy_init_t *data)
     /* allocate the context memory */
     JOY_API_ALLOC_CONTEXT(ctx_data, data->contexts)
     joy_num_contexts = data->contexts;
+
+    /* open feature file */
+    glb_config->feature_file = "./joy_ml_feature.csv";
+    if (glb_config->feature_file) {
+        glb_config->ml_feature_o = fopen(glb_config->feature_file, "w");
+        if (glb_config->ml_feature_o == NULL) {
+            joy_log_err("Failed to open %s.\n", glb_config->feature_file);
+            return 1;
+        }
+    }
 
     glb_config->num_pkts = DEFAULT_NUM_PKT_LEN;
     if ((data->num_pkts > 0) && (data->num_pkts < MAX_NUM_PKT_LEN)) {
@@ -2249,6 +2259,9 @@ void joy_shutdown(void)
     if (glb_config->ipfix_export_template) free((void*)glb_config->ipfix_export_template);
     if (glb_config->aux_resource_path) free((void*)glb_config->aux_resource_path);
 
+    /* close ml feature file */
+    if (glb_config->ml_feature_o) fclose(glb_config->ml_feature_o);
+
     /* free up the subnet labels if we have any */
     for (i=0; i < glb_config->num_subnets; ++i)
     {
@@ -2267,7 +2280,7 @@ void joy_shutdown(void)
     glb_config = NULL;
 
     /* reset the library initialized flag */
-    joy_library_initialized = 0;
+    joy_library_initialized = 0;    
 }
 
 #ifdef HAVE_CONFIG_H
