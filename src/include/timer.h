@@ -1,3 +1,6 @@
+#ifndef TIMER_H
+#define TIMER_H
+
 #include <stdlib.h>  
 #include <errno.h>
 #include <pcap.h>
@@ -17,9 +20,6 @@
 #define MAX_FILE_LINE_LEN           (1024)
 #define SIXTH_POWER                 (1000000)
 #define TIME_ARRAY_SIZE             (49)
-
-static uint64_t time_align;
-static uint64_t stamp_num;
 
 typedef enum proto_type {
     TYPE_TCP,
@@ -51,7 +51,7 @@ typedef struct joy_benchmark_t {
     uint64_t add_del_tsc;
     uint64_t fetch_pcap_tsc;
     uint64_t json_string_output_tsc;
-    uint64_t flow_aging_complete_tsc;
+    uint64_t ml_feature_extraction_tsc;
     uint64_t flow_clean_tsc;
     proto_info_t proto_info[MAX_PROTO_TYPE];
 } joy_benchmark_t;
@@ -62,9 +62,13 @@ typedef struct flow_info_t {
     uint64_t bytes;
     uint64_t feature_extraction_tsc;
     uint64_t prediction_tsc;
-    uint64_t flow_aging_complete_tsc;
+    uint64_t ml_feature_extraction_tsc;
     int complete_flag;
 } flow_info_t;
+
+static uint64_t time_align;
+static uint64_t stamp_num;
+// static joy_benchmark_t joy_benchmark;
 
 void update_flow_info(flow_record_t *ff, flow_info_t *f);
 int time_compare(const void *a, const void *b);
@@ -114,3 +118,4 @@ const char *proto2str(proto_type_e e);
  *******************************************************************
  *******************************************************************
  */
+#endif /* TIMER_H */

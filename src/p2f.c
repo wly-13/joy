@@ -554,9 +554,6 @@ static void flow_record_chrono_list_append (joy_ctx_data *ctx, flow_record_t *re
  * \return none
  */
 static void flow_record_chrono_list_remove (joy_ctx_data *ctx, flow_record_t *record) {
-
-    TIME_START(list_delete);
-
     if (record == ctx->flow_record_chrono_first) {
         ctx->flow_record_chrono_first = record->time_next;
     }
@@ -570,8 +567,6 @@ static void flow_record_chrono_list_remove (joy_ctx_data *ctx, flow_record_t *re
     if (record->time_next != NULL) {
         record->time_next->time_prev = record->time_prev;
     }
-
-    TIME_END(list_delete, joy_benchmark.add_del_tsc)
 }
 
 /**
@@ -703,7 +698,6 @@ flow_record_t *flow_key_get_record (joy_ctx_data *ctx,
 
     /* if we get here, then record == NULL  */
     if (create_new_records) {
-        TIME_START(create);
         /* allocate and initialize a new flow record */
         record = calloc(1, sizeof(flow_record_t));
         joy_log_debug("LIST record %p allocated\n", record);
@@ -745,7 +739,6 @@ flow_record_t *flow_key_get_record (joy_ctx_data *ctx,
             /* this flow has no twin, so add it to chronological list */
             flow_record_chrono_list_append(ctx, record);
         }
-        TIME_END(create, joy_benchmark.add_del_tsc);
     }
     return record;
 }
@@ -757,13 +750,14 @@ flow_record_t *flow_key_get_record (joy_ctx_data *ctx,
  */
 static void flow_record_delete (joy_ctx_data *ctx, flow_record_t *r) {
 
-    flow_info_t ff;
-    update_flow_info(r, &ff);
-    if (r->dir == 0) {
+    if(r->flow_info_processed == 0){
+        flow_info_t ff;
+        update_flow_info(r, &ff);
         update_statistics(&joy_benchmark, &ff);
     }
-
-    TIME_START(array_delete);
+    if (r->twin != NULL){
+        r->twin->twin=NULL;
+    }
 
     if (flow_record_list_remove(&ctx->flow_record_list_array[r->key_hash], r) != 0) {
         joy_log_err("problem removing flow record %p from list", r);
@@ -816,7 +810,6 @@ static void flow_record_delete (joy_ctx_data *ctx, flow_record_t *r) {
     memset_s(r, sizeof(flow_record_t), 0, sizeof(flow_record_t));
     free(r);
     r = NULL;
-    TIME_END(array_delete, joy_benchmark.add_del_tsc);
 }
 
 /**
@@ -1625,6 +1618,7 @@ static void flow_record_print_json
     }
 
     if(glb_config->ml_feature_o) {
+        TIME_START(output);
         float ml_feature[NUM_PARAMETERS_BD_LOGREG] = {1.0};
 
         if (rec->twin) {
@@ -1657,6 +1651,7 @@ static void flow_record_print_json
                 }
             }
         }
+        TIME_END(output, joy_benchmark.ml_feature_extraction_tsc);
     }
 
     /* IP object */

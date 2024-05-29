@@ -605,6 +605,9 @@ static int usage (char *s) {
            "  exe=1                      include information about host process associated with flow\n"
            "  classify=1                 include results of post-collection classification\n"
            "  num_pkts=N                 report on at most N packets per flow (0 <= N < %d)\n"
+           "  inact_timeout=N            flow inactive expiration time (sec) (0 < N < 500)\n"
+           "  act_timeout=N              flow active expiration time (sec) (0 < N < 10000)\n"
+           
            "  idp=N                      report N bytes of the initial data packet of each flow\n"
            "  label=L:F                  add label L to addresses that match the subnets in file F\n"
            "  URLmodel=URL               URL to be used to retrieve classisifer updates\n"
@@ -1517,8 +1520,8 @@ int main (int argc, char **argv) {
        init_data.contexts = 1;
     }
     //default is 10,20
-    init_data.inact_timeout = 150;
-    init_data.act_timeout = 150;
+    init_data.inact_timeout = 300;
+    init_data.act_timeout = 300;
 
     /* config was already setup, use API with pre-set configuration */
     joy_initialize_no_config(glb_config, info, &init_data);
@@ -1825,6 +1828,8 @@ int main (int argc, char **argv) {
     }
     
     /* print benchmark data */
+    joy_benchmark.total_process_tsc -= joy_benchmark.ml_feature_extraction_tsc + stamp_num * time_align;
+    joy_benchmark.json_string_output_tsc -= joy_benchmark.prediction_tsc + joy_benchmark.ml_feature_extraction_tsc;
     double flow_cnt_per_second = (double)joy_benchmark.total_flow_count /
         joy_benchmark.total_process_tsc * SIXTH_POWER;
     double packet_cnt_per_second = (double)joy_benchmark.total_packet_count /
@@ -1832,8 +1837,8 @@ int main (int argc, char **argv) {
     double byte_cnt_per_second = (double)joy_benchmark.total_byte_count /
         joy_benchmark.total_process_tsc * SIXTH_POWER;
 
-    joy_log_err("\nTraffic statistics:\n");
-    joy_log_err("\t\tTotal flows: %lu\tTotal packets: %lu\tTotal bytes: %lu\n",
+    fprintf(info, "\nTraffic statistics:\n");
+    fprintf(info, "\t\tTotal flows: %lu\tTotal packets: %lu\tTotal bytes: %lu\n",
             joy_benchmark.total_flow_count,
             joy_benchmark.total_packet_count,
             joy_benchmark.total_byte_count);
@@ -1850,32 +1855,37 @@ int main (int argc, char **argv) {
     qsort(proto_info_sorted, MAX_PROTO_TYPE,
             sizeof(proto_info_t), proto_compare);
     /* protocol information output */
-    joy_log_err("\nTop protocol:\n");
+    fprintf(info, "\nTop protocol:\n");
     for (i = 0; i < MAX_PROTO_TYPE; i++) {
         flows = proto_info_sorted[i].flows;
         packets = proto_info_sorted[i].packets;
         bytes = proto_info_sorted[i].bytes;
         if (flows > 0) {
             if ((proto_name = proto2str(proto_info_sorted[i].type))) {
-                joy_log_err("\t\t%s\tflows: %-8d\tpackets: %-8lu\tbytes: %-16lu\t[ %5.02f %% ]\n",
+                fprintf(info, "\t\t%s\tflows: %-8d\tpackets: %-8lu\tbytes: %-16lu\t[ %5.02f %% ]\n",
                         proto_name, flows, packets, bytes,
                         100 * (double)flows / (double)joy_benchmark.total_flow_count);
             }
         }
     }
 
-    joy_log_err("\nProcess tsc (μs):\n");
-    joy_log_err("\t\t%s:\t\t\t %-16lu\t\n", "Total",
+    fprintf(info, "\nThroughput overall(Prediction + Flow table + Feature extraction):\n");
+    fprintf(info, "\t\t%s:\t %.0f\t\n", "Flow per second (fps)", round(flow_cnt_per_second));
+    fprintf(info, "\t\t%s: %.0f\t\n", "Packet per second (pps)", round(packet_cnt_per_second));
+    fprintf(info, "\t\t%s:\t %.0f\t\n", "Byte per second (bps)", round(byte_cnt_per_second));
+
+    fprintf(info, "\nProcess tsc (μs):\n");
+    fprintf(info, "\t\t%s:\t\t\t %-16lu\t\n", "Total",
             joy_benchmark.total_process_tsc);
-    joy_log_err("\t\t%s:\t\t %-16lu\t\n", "Fetch PCAP",
+    fprintf(info, "\t\t%s:\t\t %-16lu\t\n", "Fetch PCAP",
             joy_benchmark.fetch_pcap_tsc);
-    joy_log_err("\t\t%s:\t\t %-16lu\t\n", "Create&Delete",
-            joy_benchmark.add_del_tsc);
-    joy_log_err("\t\t%s:\t\t %-16lu\t\n", "Flow Table + Feature Extraction",
+    fprintf(info, "\t\t%s:\t\t %-16lu\t\n", "Process PCAP",
             joy_benchmark.feature_extraction_tsc);
-    joy_log_err("\t\t%s:\t %-16lu\t\n", "JSON String Building",
+    fprintf(info, "\t\t%s:\t %-16lu\t\n", "JSON String Building",
             joy_benchmark.json_string_output_tsc);
-    joy_log_err("\t\t%s:\t\t %-16lu\t\n", "Prediction",
+    fprintf(info, "\t\t%s:\t %-16lu\t\n", "ML feature output",
+            joy_benchmark.ml_feature_extraction_tsc);
+    fprintf(info, "\t\t%s:\t\t %-16lu\t\n", "Prediction",
             joy_benchmark.prediction_tsc);
 
     joy_shutdown();
@@ -1909,7 +1919,6 @@ int process_pcap_file (int index, char *file_name, const char *filtr_exp, bpf_u_
     uint64_t idx = index;
     struct pcap_pkthdr hdr;
     const unsigned char *packet = NULL;
-    flow_record_t *record;
 
     joy_log_info("reading pcap file %s", file_name);
 
@@ -1943,15 +1952,15 @@ int process_pcap_file (int index, char *file_name, const char *filtr_exp, bpf_u_
         }
         pcount++;
         TIME_START(flow_table);
-        record = joy_process_packet((unsigned char *)idx, &hdr,packet,0,NULL);
+        joy_process_packet((unsigned char *)idx, &hdr,packet,0,NULL);
         //more = pcap_dispatch(handle, NUM_PACKETS_IN_LOOP, joy_libpcap_process_packet, (unsigned char *)idx);
         TIME_END(flow_table,joy_benchmark.feature_extraction_tsc)
         /* Print out expired flows */
         TIME_START(json_string_extraction)
         joy_print_flow_data(index, JOY_EXPIRED_FLOWS);
-        TIME_END(json_string_extraction, joy_benchmark.json_string_output_tsc)
+        TIME_END_N(json_string_extraction, joy_benchmark.json_string_output_tsc,4)
     }
-    joy_log_err("pcount: %d",pcount)
+    fprintf(info, "pcount: %d",pcount);
 
     joy_log_info("all flows processed");
 
@@ -1963,6 +1972,6 @@ int process_pcap_file (int index, char *file_name, const char *filtr_exp, bpf_u_
     pcap_close(handle);
     TIME_START(feature_extraction_a)
     joy_print_flow_data(index, JOY_ALL_FLOWS);
-    TIME_END(feature_extraction_a, joy_benchmark.feature_extraction_tsc)
+    TIME_END_N(feature_extraction_a, joy_benchmark.json_string_output_tsc,4)
     return 0;
 }

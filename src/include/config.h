@@ -89,6 +89,8 @@ typedef struct configuration {
 
     uint8_t report_hd;
     uint8_t num_pkts;
+    uint16_t inact_timeout;
+    uint16_t act_timeout;
 
     uint8_t verbosity;
     uint8_t num_subnets;               /*!< counts entries in subnet array */

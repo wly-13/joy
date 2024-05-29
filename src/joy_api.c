@@ -644,7 +644,7 @@ int joy_initialize_no_config(void *config, FILE *err_info, joy_init_t *data)
     joy_num_contexts = data->contexts;
 
     /* open feature file */
-    glb_config->feature_file = "./joy_ml_feature.csv";
+    glb_config->feature_file = "/home/liyan/lightgbm_optimization/test_data/joy_ml_feature.csv";
     if (glb_config->feature_file) {
         glb_config->ml_feature_o = fopen(glb_config->feature_file, "w");
         if (glb_config->ml_feature_o == NULL) {
@@ -661,7 +661,8 @@ int joy_initialize_no_config(void *config, FILE *err_info, joy_init_t *data)
     glb_config->flow_key_match_method = EXACT_MATCH;
 
     /* setup the inactive and active timeouts for a flow record */
-    flow_record_update_timeouts(data->inact_timeout, data->act_timeout);
+    // flow_record_update_timeouts(data->inact_timeout, data->act_timeout);
+    flow_record_update_timeouts(glb_config->inact_timeout, glb_config->act_timeout);
 
     /* initialize the protocol identification dictionary */
     if (proto_identify_init()) {

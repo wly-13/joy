@@ -48,6 +48,7 @@
 #include "err.h"
 #include "safe_lib.h"
 #include "joy_api.h"
+#include "timer.h"
 
 /**
  * \fn int main ()

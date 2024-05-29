@@ -254,6 +254,12 @@ static int config_parse_command (configuration_t *config,
     } else if (match(command, "num_pkts")) {
         parse_check(parse_int((unsigned int*)&config->num_pkts, arg, num, 0, MAX_NUM_PKT_LEN));
 
+    } else if (match(command, "inact_timeout")) {
+        parse_check(parse_int((unsigned int*)&config->inact_timeout, arg, num, 0, 500));
+
+    } else if (match(command, "act_timeout")) {
+        parse_check(parse_int((unsigned int*)&config->act_timeout, arg, num, 0, 10000));
+
     } else if (match(command, "count")) {
         parse_check(parse_int(&config->max_records, arg, num, 1, INT_MAX));
 

@@ -178,6 +178,7 @@ typedef struct flow_record_ {
     bool salt_ext_processed;
     bool splt_ext_processed;
     bool bd_ext_processed;
+    bool flow_info_processed;
     uint8_t feature_flags;                /*!< flags to signal when a data feature is ready */
   
     define_all_features(feature_list)     /*!< define all features listed in feature.h */

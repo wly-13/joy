@@ -2,12 +2,18 @@
 
 void update_flow_info(flow_record_t *ff, flow_info_t *f)
 {
-    if (ff->dir == 1) {
-        return;
-    }
     /* update protocol type, L7 first */
-    f->bytes = ff->num_bytes;
-    f->packets = ff->np;
+    if (ff->twin != NULL){
+        f->bytes = ff->num_bytes + ff->twin->num_bytes;
+        f->packets = ff->np + ff->twin->np;
+        ff->flow_info_processed = 1;
+        ff->twin->flow_info_processed = 1;
+    } else {
+        f->bytes = ff->num_bytes;
+        f->packets = ff->np;
+        ff->flow_info_processed = 1;
+    }
+    
 
     if (ff->key.prot == IPPROTO_TCP) {
         f->type = TYPE_TCP;
@@ -29,6 +35,7 @@ void update_flow_info(flow_record_t *ff, flow_info_t *f)
         f->type = TYPE_HTTP;
         return;
     }
+
 }
 
 #define PROTO_INFO_UPDATE(F, JOY_BENCHMARK)                                   \
