@@ -104,7 +104,8 @@ static const int include_os = 1;
 #define expiration_type_active  'a'
 #define expiration_type_inactive 'i'
 
-extern joy_benchmark_t joy_benchmark;
+joy_benchmark_t joy_benchmark;
+
 
 /*
  * Local prototypes

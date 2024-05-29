@@ -154,7 +154,7 @@ extern configuration_t active_config;
 extern configuration_t *glb_config;
 
 /* global veriable*/
-joy_benchmark_t joy_benchmark;
+extern joy_benchmark_t joy_benchmark;
 
 /* logfile definitions */
 extern FILE *info;
