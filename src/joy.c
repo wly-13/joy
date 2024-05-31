@@ -1830,7 +1830,7 @@ int main (int argc, char **argv) {
     /* print benchmark data */
     joy_benchmark.total_process_tsc -= joy_benchmark.ml_feature_extraction_tsc + stamp_num * time_align;
     joy_benchmark.json_string_output_tsc -= joy_benchmark.prediction_tsc + joy_benchmark.ml_feature_extraction_tsc;
-    // joy_benchmark.feature_extraction_tsc = joy_benchmark.total_process_tsc - joy_benchmark.fetch_pcap_tsc - joy_benchmark.json_string_output_tsc - joy_benchmark.prediction_tsc;
+    
     double flow_cnt_per_second = (double)joy_benchmark.total_flow_count /
         joy_benchmark.total_process_tsc * SIXTH_POWER;
     double packet_cnt_per_second = (double)joy_benchmark.total_packet_count /
