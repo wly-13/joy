@@ -1830,6 +1830,7 @@ int main (int argc, char **argv) {
     /* print benchmark data */
     joy_benchmark.total_process_tsc -= joy_benchmark.ml_feature_extraction_tsc + stamp_num * time_align;
     joy_benchmark.json_string_output_tsc -= joy_benchmark.prediction_tsc + joy_benchmark.ml_feature_extraction_tsc;
+    // joy_benchmark.feature_extraction_tsc = joy_benchmark.total_process_tsc - joy_benchmark.fetch_pcap_tsc - joy_benchmark.json_string_output_tsc - joy_benchmark.prediction_tsc;
     double flow_cnt_per_second = (double)joy_benchmark.total_flow_count /
         joy_benchmark.total_process_tsc * SIXTH_POWER;
     double packet_cnt_per_second = (double)joy_benchmark.total_packet_count /
@@ -1883,8 +1884,6 @@ int main (int argc, char **argv) {
             joy_benchmark.feature_extraction_tsc);
     fprintf(info, "\t\t%s:\t %-16lu\t\n", "JSON String Building",
             joy_benchmark.json_string_output_tsc);
-    fprintf(info, "\t\t%s:\t %-16lu\t\n", "ML feature output",
-            joy_benchmark.ml_feature_extraction_tsc);
     fprintf(info, "\t\t%s:\t\t %-16lu\t\n", "Prediction",
             joy_benchmark.prediction_tsc);
 
@@ -1944,13 +1943,11 @@ int process_pcap_file (int index, char *file_name, const char *filtr_exp, bpf_u_
             return -3;
         }
     }
-    int pcount=0;
     while (packet = fetch_packet(&hdr)) {
         /* Loop over all packets in capture file */
         if (!packet) {
             continue;
         }
-        pcount++;
         TIME_START(flow_table);
         joy_process_packet((unsigned char *)idx, &hdr,packet,0,NULL);
         //more = pcap_dispatch(handle, NUM_PACKETS_IN_LOOP, joy_libpcap_process_packet, (unsigned char *)idx);
@@ -1958,9 +1955,8 @@ int process_pcap_file (int index, char *file_name, const char *filtr_exp, bpf_u_
         /* Print out expired flows */
         TIME_START(json_string_extraction)
         joy_print_flow_data(index, JOY_EXPIRED_FLOWS);
-        TIME_END_N(json_string_extraction, joy_benchmark.json_string_output_tsc,4)
+        TIME_END_N(json_string_extraction, joy_benchmark.json_string_output_tsc,2)
     }
-    fprintf(info, "pcount: %d",pcount);
 
     joy_log_info("all flows processed");
 
@@ -1972,6 +1968,6 @@ int process_pcap_file (int index, char *file_name, const char *filtr_exp, bpf_u_
     pcap_close(handle);
     TIME_START(feature_extraction_a)
     joy_print_flow_data(index, JOY_ALL_FLOWS);
-    TIME_END_N(feature_extraction_a, joy_benchmark.json_string_output_tsc,4)
+    TIME_END_N(feature_extraction_a, joy_benchmark.json_string_output_tsc,2)
     return 0;
 }

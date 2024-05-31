@@ -260,6 +260,9 @@ static int config_parse_command (configuration_t *config,
     } else if (match(command, "act_timeout")) {
         parse_check(parse_int((unsigned int*)&config->act_timeout, arg, num, 0, 10000));
 
+    } else if (match(command, "feat_out")) {
+        parse_check(parse_string(&config->feature_file, arg, num));
+
     } else if (match(command, "count")) {
         parse_check(parse_int(&config->max_records, arg, num, 1, INT_MAX));
 

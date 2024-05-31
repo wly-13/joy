@@ -1766,7 +1766,9 @@ static void flow_record_print_and_delete (joy_ctx_data *ctx, flow_record_t *reco
     /*
      * Print the record to JSON output
      */
+    // TIME_START(json_string_extraction)
     flow_record_print_json(ctx, record);
+    // TIME_END_N(json_string_extraction, joy_benchmark.json_string_output_tsc,4)
 
     /*
      * Export this record before deletion if running in
